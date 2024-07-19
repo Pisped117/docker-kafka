@@ -1,0 +1,126 @@
+version: '3'
+ 
+services:
+  zookeeper:
+    image: bitnami/zookeeper:3.7.2
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - net_globat
+ 
+  kafka:
+    image: bitnami/kafka:3.3.2
+    container_name: kafka
+    ports:
+      - "9092:9092" #PARA REALIZAR LA CONEXION DENTRO DEL CONTENEDOR
+      - "29092:29092" #CUANDO SE REALIZA LA CONEXION POR FUERA DEL CONTENEDOR(CONEXION EXTERIOR)
+    environment:
+      #- KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      - KAFKA_CFG_BROKER_LISTENER_NAMES=PLAINTEXT
+ 
+    depends_on:
+      - zookeeper
+    networks:
+      - net_globat
+ 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    ports:
+      - 8090:8080
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181      
+    networks:
+      - net_globat
+
+  mysql:
+    image: mysql:8.3
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 12345
+      MYSQL_DATABASE: kafka_bd
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: 12345
+    volumes:
+      - mysql-volume:/var/lib/mysql
+    networks:
+      - net_globat
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_PASSWORD=admin
+      - REDIS_PORT=6379
+    #command: redis-server --save 20 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
+    volumes:
+      - redis-volume:/data
+    networks:
+      - net_globat
+
+  app_producer:
+    build:
+      context: ./producer
+      dockerfile: DockerFile
+    container_name: app_producer
+    ports:
+      - "8080:8080"    
+    depends_on:
+      - kafka
+      - zookeeper
+    networks:
+      - net_globat
+
+  app_consumer1:
+    build:
+      context: ./consumer2
+      dockerfile: DockerFile
+    container_name: app_consumer1
+    ports:
+      - "8083:8085"    
+    depends_on:
+      - redis
+      - mysql
+      - kafka
+      - zookeeper
+    networks:
+      - net_globat
+
+  app_consumer2:
+    build:
+      context: ./consumer2
+      dockerfile: DockerFile
+    container_name: app_consumer2
+    ports:
+      - "8085:8085"    
+    depends_on:
+      - redis
+      - mysql
+      - kafka
+      - zookeeper
+    networks:
+      - net_globat
+
+volumes:
+  mysql-volume:
+  redis-volume:
+ 
+networks:
+  net_globat:
+    driver: bridge
